@@ -7,8 +7,8 @@ WORKDIR /app
 COPY . .
 RUN go mod download
 
-ARG BUILD_TAGS=""
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -tags="${BUILD_TAGS}" -o /app/main ./cmd/
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" -o /app/main ./cmd/
 
 FROM golang:1.25.5-alpine AS dev
 
