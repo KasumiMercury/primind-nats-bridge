@@ -2,6 +2,10 @@ FROM golang:1.25.5-alpine AS builder
 
 RUN apk update
 
+ARG GRPC_HEALTH_PROBE_VERSION=v0.4.28
+RUN wget -qO /grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
+    chmod +x /grpc_health_probe
+
 WORKDIR /app
 
 COPY . .
@@ -26,6 +30,7 @@ CMD ["air", "-c", ".air.toml"]
 
 FROM gcr.io/distroless/static-debian12 AS runner
 
+COPY --from=builder /grpc_health_probe /grpc_health_probe
 COPY --from=builder /app/main /
 
 CMD ["/main"]
