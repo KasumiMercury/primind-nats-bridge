@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"connectrpc.com/grpchealth"
+	"github.com/KasumiMercury/primind-nats-bridge/internal/health"
 	"github.com/KasumiMercury/primind-nats-bridge/internal/observability/logging"
 	"github.com/KasumiMercury/primind-nats-bridge/internal/observability/tracing"
 	"github.com/ThreeDotsLabs/watermill"
@@ -484,56 +486,26 @@ func processMessage(ctx context.Context, client *http.Client, route *Route, msg 
 
 // startHealthServer starts an HTTP server for health check endpoints.
 func startHealthServer(natsURL, version string) *http.Server {
+	healthChecker := health.NewChecker(natsURL, version)
+
 	mux := http.NewServeMux()
 
-	// Liveness probe - just checks if the process is running
-	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-			slog.Warn("failed to write health response", slog.String("error", err.Error()))
-		}
-	})
+	// HTTP Health check endpoints
+	mux.HandleFunc("/health/live", healthChecker.LiveHandler)
+	mux.HandleFunc("/health/ready", healthChecker.ReadyHandler)
+	mux.HandleFunc("/health", healthChecker.ReadyHandler)
 
-	// Readiness probe - checks NATS connectivity
-	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
-		response := map[string]any{
-			"status":  "healthy",
-			"version": version,
-			"checks": map[string]any{
-				"nats": map[string]string{"status": "healthy"},
-			},
-		}
+	// gRPC Health Checking Protocol (grpc.health.v1.Health/Check)
+	grpcHealthChecker := health.NewGRPCChecker(healthChecker)
+	grpcHealthPath, grpcHealthHandler := grpchealth.NewHandler(grpcHealthChecker)
 
-		// Check NATS connectivity
-		conn, err := nc.Connect(natsURL, nc.Timeout(2*time.Second))
-		if err != nil {
-			response["status"] = "unhealthy"
-			response["checks"] = map[string]any{
-				"nats": map[string]any{
-					"status": "unhealthy",
-					"error":  err.Error(),
-				},
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			if err := json.NewEncoder(w).Encode(response); err != nil {
-				slog.Warn("failed to write health response", slog.String("error", err.Error()))
-			}
+	// Create multiplexed handler for HTTP + gRPC health
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, grpcHealthPath) {
+			grpcHealthHandler.ServeHTTP(w, req)
 			return
 		}
-		conn.Close()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			slog.Warn("failed to write health response", slog.String("error", err.Error()))
-		}
-	})
-
-	// Default health endpoint - same as readiness
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/health/ready", http.StatusTemporaryRedirect)
+		mux.ServeHTTP(w, req)
 	})
 
 	port := os.Getenv("HEALTH_PORT")
@@ -543,7 +515,7 @@ func startHealthServer(natsURL, version string) *http.Server {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           mux,
+		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
