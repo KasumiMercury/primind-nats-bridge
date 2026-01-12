@@ -178,6 +178,16 @@ func run() error {
 
 	slog.Info("bridge started", slog.Int("routes", len(config.Routes)))
 
+	// Start health check HTTP server
+	healthServer := startHealthServer(config.NatsURL, Version)
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := healthServer.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("health server shutdown error", slog.String("error", err.Error()))
+		}
+	}()
+
 	<-ctx.Done()
 	slog.Info("shutdown signal received",
 		slog.String("event", "bridge.shutdown.start"),
@@ -470,4 +480,82 @@ func processMessage(ctx context.Context, client *http.Client, route *Route, msg 
 	)
 
 	return nil
+}
+
+// startHealthServer starts an HTTP server for health check endpoints.
+func startHealthServer(natsURL, version string) *http.Server {
+	mux := http.NewServeMux()
+
+	// Liveness probe - just checks if the process is running
+	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+			slog.Warn("failed to write health response", slog.String("error", err.Error()))
+		}
+	})
+
+	// Readiness probe - checks NATS connectivity
+	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]any{
+			"status":  "healthy",
+			"version": version,
+			"checks": map[string]any{
+				"nats": map[string]string{"status": "healthy"},
+			},
+		}
+
+		// Check NATS connectivity
+		conn, err := nc.Connect(natsURL, nc.Timeout(2*time.Second))
+		if err != nil {
+			response["status"] = "unhealthy"
+			response["checks"] = map[string]any{
+				"nats": map[string]any{
+					"status": "unhealthy",
+					"error":  err.Error(),
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				slog.Warn("failed to write health response", slog.String("error", err.Error()))
+			}
+			return
+		}
+		conn.Close()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			slog.Warn("failed to write health response", slog.String("error", err.Error()))
+		}
+	})
+
+	// Default health endpoint - same as readiness
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/health/ready", http.StatusTemporaryRedirect)
+	})
+
+	port := os.Getenv("HEALTH_PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	server := &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		slog.Info("starting health server", slog.String("port", port))
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("health server error", slog.String("error", err.Error()))
+		}
+	}()
+
+	return server
 }
