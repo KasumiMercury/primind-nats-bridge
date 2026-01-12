@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"connectrpc.com/grpchealth"
+	"github.com/KasumiMercury/primind-nats-bridge/internal/health"
 	"github.com/KasumiMercury/primind-nats-bridge/internal/observability/logging"
 	"github.com/KasumiMercury/primind-nats-bridge/internal/observability/tracing"
 	"github.com/ThreeDotsLabs/watermill"
@@ -177,6 +179,16 @@ func run() error {
 	}
 
 	slog.Info("bridge started", slog.Int("routes", len(config.Routes)))
+
+	// Start health check HTTP server
+	healthServer := startHealthServer(config.NatsURL, Version)
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := healthServer.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("health server shutdown error", slog.String("error", err.Error()))
+		}
+	}()
 
 	<-ctx.Done()
 	slog.Info("shutdown signal received",
@@ -470,4 +482,52 @@ func processMessage(ctx context.Context, client *http.Client, route *Route, msg 
 	)
 
 	return nil
+}
+
+// startHealthServer starts an HTTP server for health check endpoints.
+func startHealthServer(natsURL, version string) *http.Server {
+	healthChecker := health.NewChecker(natsURL, version)
+
+	mux := http.NewServeMux()
+
+	// HTTP Health check endpoints
+	mux.HandleFunc("/health/live", healthChecker.LiveHandler)
+	mux.HandleFunc("/health/ready", healthChecker.ReadyHandler)
+	mux.HandleFunc("/health", healthChecker.ReadyHandler)
+
+	// gRPC Health Checking Protocol (grpc.health.v1.Health/Check)
+	grpcHealthChecker := health.NewGRPCChecker(healthChecker)
+	grpcHealthPath, grpcHealthHandler := grpchealth.NewHandler(grpcHealthChecker)
+
+	// Create multiplexed handler for HTTP + gRPC health
+	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasPrefix(req.URL.Path, grpcHealthPath) {
+			grpcHealthHandler.ServeHTTP(w, req)
+			return
+		}
+		mux.ServeHTTP(w, req)
+	})
+
+	port := os.Getenv("HEALTH_PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	server := &http.Server{
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		slog.Info("starting health server", slog.String("port", port))
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("health server error", slog.String("error", err.Error()))
+		}
+	}()
+
+	return server
 }
