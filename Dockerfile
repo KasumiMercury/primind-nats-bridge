@@ -33,4 +33,7 @@ FROM gcr.io/distroless/base-debian12 AS runner
 COPY --from=builder /grpc_health_probe /grpc_health_probe
 COPY --from=builder /app/main /
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["/grpc_health_probe", "-addr=:8080"]
+
 CMD ["/main"]
