@@ -28,7 +28,7 @@ RUN go install github.com/air-verse/air@latest
 
 CMD ["air", "-c", ".air.toml"]
 
-FROM gcr.io/distroless/static-debian12 AS runner
+FROM gcr.io/distroless/base-debian12 AS runner
 
 COPY --from=builder /grpc_health_probe /grpc_health_probe
 COPY --from=builder /app/main /
