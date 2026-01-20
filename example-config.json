@@ -1,0 +1,19 @@
+{
+  "nats": {
+    "url": "nats://nats:4222",
+    "stream": "EXAMPLE_EVENTS",
+    "consumer_group": "nats-http-bridge"
+  },
+  "http": {
+    "timeout": "30s"
+  },
+  "routes": [
+    {
+      "subject": "example.events",
+      "method": "POST",
+      "endpoint": "http://localhost:8080",
+      "content_type": "application/json"
+    }
+  ]
+}
+
