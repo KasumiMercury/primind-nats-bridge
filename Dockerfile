@@ -2,7 +2,7 @@ FROM golang:1.27-alpine AS builder
 
 RUN apk update
 
-ARG GRPC_HEALTH_PROBE_VERSION=v0.4.28
+ARG GRPC_HEALTH_PROBE_VERSION=v0.4.59
 RUN wget -qO /grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
     chmod +x /grpc_health_probe
 
