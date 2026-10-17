@@ -75,12 +75,12 @@ type Config struct {
 var Version = "dev"
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(context.Background()); err != nil {
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run(parent context.Context) error {
 	slog.SetDefault(initLogger())
 
 	config, err := loadConfig()
@@ -101,7 +101,7 @@ func run() error {
 		slog.String("stream", config.Stream),
 	)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	tp, err := initTracing(ctx)
