@@ -1,8 +1,8 @@
-FROM golang:1.25-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 RUN apk update
 
-ARG GRPC_HEALTH_PROBE_VERSION=v0.4.28
+ARG GRPC_HEALTH_PROBE_VERSION=v0.4.59
 RUN wget -qO /grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 && \
     chmod +x /grpc_health_probe
 
@@ -14,7 +14,7 @@ RUN go mod download
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.Version=${VERSION}" -o /app/main ./cmd/
 
-FROM golang:1.25-alpine AS dev
+FROM golang:1.27-alpine AS dev
 
 ENV CGO_ENABLED=0
 ENV GO111MODULE=auto
