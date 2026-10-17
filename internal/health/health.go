@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"connectrpc.com/grpchealth"
+	"connectrpc.com/grpchealth/v2"
 	nc "github.com/nats-io/nats.go"
 )
 
