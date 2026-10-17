@@ -15,7 +15,9 @@ import (
 	"syscall"
 	"time"
 
-	"connectrpc.com/grpchealth"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/grpchealth/v2"
 	"github.com/KasumiMercury/primind-nats-bridge/internal/health"
 	"github.com/KasumiMercury/primind-nats-bridge/internal/observability/logging"
 	"github.com/KasumiMercury/primind-nats-bridge/internal/observability/tracing"
@@ -497,16 +499,9 @@ func startHealthServer(natsURL, version string) *http.Server {
 
 	// gRPC Health Checking Protocol (grpc.health.v1.Health/Check)
 	grpcHealthChecker := health.NewGRPCChecker(healthChecker)
-	grpcHealthPath, grpcHealthHandler := grpchealth.NewHandler(grpcHealthChecker)
-
-	// Create multiplexed handler for HTTP + gRPC health
-	handler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if strings.HasPrefix(req.URL.Path, grpcHealthPath) {
-			grpcHealthHandler.ServeHTTP(w, req)
-			return
-		}
-		mux.ServeHTTP(w, req)
-	})
+	connectServer := connect.NewServer()
+	grpchealth.Register(connectServer, grpcHealthChecker)
+	connecthttp.Mount(mux, connectServer)
 
 	port := os.Getenv("HEALTH_PORT")
 	if port == "" {
@@ -519,7 +514,7 @@ func startHealthServer(natsURL, version string) *http.Server {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           handler,
+		Handler:           mux,
 		Protocols:         protocols,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

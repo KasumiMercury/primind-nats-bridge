@@ -3,7 +3,8 @@ module github.com/KasumiMercury/primind-nats-bridge
 go 1.27.0
 
 require (
-	connectrpc.com/grpchealth v1.5.0
+	connectrpc.com/connect/v2 v2.0.1
+	connectrpc.com/grpchealth/v2 v2.0.0
 	github.com/ThreeDotsLabs/watermill v1.5.3
 	github.com/ThreeDotsLabs/watermill-nats/v2 v2.2.0
 	github.com/google/uuid v1.6.0
@@ -15,7 +16,6 @@ require (
 )
 
 require (
-	connectrpc.com/connect v1.21.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
