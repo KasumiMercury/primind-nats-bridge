@@ -1,6 +1,6 @@
 module github.com/KasumiMercury/primind-nats-bridge
 
-go 1.25.5
+go 1.27.0
 
 require (
 	connectrpc.com/grpchealth v1.4.0
