@@ -26,8 +26,6 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 )
 
 func init() {
@@ -515,11 +513,14 @@ func startHealthServer(natsURL, version string) *http.Server {
 		port = "8080"
 	}
 
-	h2s := &http2.Server{}
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           h2c.NewHandler(handler, h2s),
+		Handler:           handler,
+		Protocols:         protocols,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
