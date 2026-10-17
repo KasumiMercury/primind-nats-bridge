@@ -2,5 +2,77 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "timezone": "Asia/Tokyo",
+  "schedule": [
+    "* 5-8 * * 6"
+  ],
+  "minimumReleaseAge": "7 days",
+  "vulnerabilityAlerts": {
+    "schedule": [
+      "at any time"
+    ],
+    "minimumReleaseAge": "0 days"
+  },
+  "osvVulnerabilityAlerts": true,
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "grpc_health_probe downloaded in the Dockerfile",
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile$/"
+      ],
+      "matchStrings": [
+        "ARG GRPC_HEALTH_PROBE_VERSION=(?<currentValue>v\\S+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "grpc-ecosystem/grpc-health-probe"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Group minor and patch updates of stable (>= 1.0) packages",
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "matchCurrentVersion": "!/^v?0\\./",
+      "groupName": "minor and patch updates"
+    },
+    {
+      "description": "Patch updates of 0.x packages",
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "matchCurrentVersion": "/^v?0\\./",
+      "groupName": "minor and patch updates"
+    },
+    {
+      "description": "Go release trains stay on 0.x but do not break in minors",
+      "matchPackageNames": [
+        "golang.org/x/**",
+        "google.golang.org/api",
+        "google.golang.org/genproto/**",
+        "cloud.google.com/go/**"
+      ],
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "groupName": "minor and patch updates"
+    },
+    {
+      "description": "A Go toolchain minor changes GODEBUG defaults; review it on its own",
+      "matchPackageNames": [
+        "go",
+        "golang"
+      ],
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "groupName": "Go toolchain"
+    }
   ]
 }
